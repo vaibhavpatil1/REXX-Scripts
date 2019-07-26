@@ -1,0 +1,343 @@
+/*  Rexx program to Check if Member is present in the Library                       
+    ------------------------------------------------------------                
+    Usage :                                                                     
+    TSO CHKMMBR                                          
+    EX: TSO CHKPRM                               
+      -- This REXX script can be used before running any job for syntax and existance checks
+         and to avoid possible JCL errors
+      -- In my current role, we share many Jobs with PROD Control group to execute as we dont have access to run jobs in prod
+      -- Run this script on browse/ view screen of any JCL             
+      -- It will expand the PROCS in the JCL
+      -- It will replace all the symbolics in the JCL
+      -- Will validate if all the members are present in the library 
+      -- It will also validate if files being read are present (Enhancement in progress)
+    EX: TSO CHKPRM VTSTAPP.ICAPMAR.CARDLIB.E E                                  
+      -- Will compare all members from VTSTAPP.ICAPMAR.CARDLIB.E with           
+      -- VTSTSHR.TEST'E'NV.CARDLIB                                              
+    ------------------------------------------------------------*/ 
+    
+    Arg PARM                                                                      
+    G. = ""                                                                     
+  G.ParmIn = PARM                                                               
+                                                                                
+  Call 1000_Initialize                                                          
+  Call 2000_Process                                                             
+  Call Exit_Rexx                                                                
+                                                                                
+/* ------------------ End of Main Script -----------------------*/              
+                                                                                
+                                                                                
+  1000_Initialize:                                                              
+/*------------------------------------------------------------                  
+                  Initialization..                                              
+  ------------------------------------------------------------*/                
+    ADDRESS TSO                                                                 
+    Call 1100_GetParms                                                          
+    Call 1200_Set_ShrLib                                                        
+    Return                                                                      
+                                                                                
+  1100_GetParms: Procedure Expose G.                                            
+/*------------------------------------------------------------                  
+                  Receive Inline parameters                                     
+  ------------------------------------------------------------*/                
+    Done = "False"                                                              
+    Parse Var G.ParmIn,                                                         
+          G.Rexx.DevLib G.Rexx.ChkRgn .                                         
+    If G.Rexx.DevLib = "ALL" | ,                                                
+       G.Rexx.DevLib = "P"   | ,                                                
+       G.Rexx.DevLib = "S"   | ,                                                
+       G.Rexx.DevLib = "D"   | ,                                                
+       G.Rexx.DevLib = "E"   | ,                                                
+       G.Rexx.DevLib = "X"   | ,                                                
+       G.Rexx.DevLib = "M"   | ,                                                
+       G.Rexx.DevLib = "F"   Then                                               
+    Do                                                                          
+       G.Rexx.ChkRgn = G.Rexx.DevLib                                            
+       G.Rexx.DevLib = ""                                                       
+    End                                                                         
+    If G.Rexx.ChkRgn = "" then                                                  
+    Do                                                                          
+      G.Rexx.ChkRgn = "ALL"                                                     
+    End                                                                         
+                                                                                
+    Do Until Done = "True"                                                      
+      DSN = "'" || G.Rexx.DevLib || "'"                                         
+      Select                                                                    
+        When G.Rexx.DevLib = "" then                                            
+        Do                                                                      
+          Say "Missing PDS Library. Please enter"                               
+        End                                                                     
+        When G.Rexx.DevLib = "EXIT" Then                                        
+        Do                                                                      
+          Say "Bye"                                                             
+          Call Exit_Rexx                                                        
+        End                                                                     
+        When SYSDSN(DSN) /= "OK" Then                                           
+        Do                                                                      
+           Say "Unable to locate Library " G.Rexx.DevLib                        
+        End                                                                     
+        When SYSDSN(DSN) = "OK" Then                                            
+        Do                                                                      
+           Cmd = "LISTDS '" || Strip(G.Rexx.DevLib) ||"' STATUS"                
+           rc = OUTTRAP('OUT.')                                                 
+           Cmd                                                                  
+           rc = OUTTRAP('OFF')                                                  
+           If Index(OUT.3," PO ") > 0 Then                                      
+           Do                                                                   
+              Done = "True"                                                     
+              Iterate                                                           
+           End                                                                  
+           Else                                                                 
+           Do                                                                   
+              Say "Check the dataset Type. Is it PDS?"                          
+           End                                                                  
+        End                                                                     
+        Otherwise                                                               
+        Do                                                                      
+           Done = "False"                                                       
+        End                                                                     
+      End                                                                       
+      Say "Re Enter Library .. "                                                
+      Pull G.Rexx.DevLib                                                        
+      G.Rexx.DevLib = Strip(G.Rexx.DevLib)                                      
+      Upper G.Rexx.DevLib                                                       
+    End                                                                         
+    Return                                                                      
+                                                                                
+  1200_Set_ShrLib: Procedure Expose G.                                          
+  /* ------------------------------------------------------------               
+                  Set all Libraries to be Checked                               
+    ------------------------------------------------------------*/              
+    If index(G.Rexx.DevLib,"CARD") > 0 then                                     
+    Do                                                                          
+       ElementType="CARD"                                                       
+    End                                                                         
+    else                                                                        
+    Do                                                                          
+       ElementType="PARM"                                                       
+    End                                                                         
+    SQ = 1                                                                      
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTDNV.PARMLIB"                               
+    Else                                                                        
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTDNV.CARDLIB"                               
+    G.REXX.LIBID.SQ  = "D"                                                      
+    IF Index(G.Rexx.ChkRgn,"D") > 0 | ,                                         
+       G.Rexx.ChkRgn = "ALL"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VPRDEND.UNT.E001.PARMLIB"                              
+    Else                                                                        
+       G.REXX.LIB.SQ  = "VPRDEND.UNT.E001.CARDLIB"                              
+    G.REXX.LIBID.SQ  = "U1"                                                     
+    IF Index(G.Rexx.ChkRgn,"U1") > 0 | ,                                        
+       G.Rexx.ChkRgn = "ALL"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTENV.PARMLIB"                               
+    else                                                                        
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTENV.CARDLIB"                               
+    G.REXX.LIBID.SQ  = "E"                                                      
+    IF Index(G.Rexx.ChkRgn,"E") > 0 | ,                                         
+       G.Rexx.ChkRgn = "ALL"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VPRDEND.INT.E001.PARMLIB"                              
+    Else                                                                        
+       G.REXX.LIB.SQ  = "VPRDEND.INT.E001.CARDLIB"                              
+    G.REXX.LIBID.SQ  = "I1"                                                     
+    IF Index(G.Rexx.ChkRgn,"I1") > 0 | ,                                        
+       G.Rexx.ChkRgn = "ALL"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTFNV.PARMLIB"                               
+    else                                                                        
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTFNV.CARDLIB"                               
+    G.REXX.LIBID.SQ  = "F"                                                      
+    IF Index(G.Rexx.ChkRgn,"F") > 0 | ,                                         
+       G.Rexx.ChkRgn = "ALL"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTPNV.PARMLIB"                               
+    else                                                                        
+       G.REXX.LIB.SQ  = "VTSTSHR.TESTPNV.CARDLIB"                               
+    G.REXX.LIBID.SQ  = "P"                                                      
+    IF Index(G.Rexx.ChkRgn,"P") > 0 | ,                                         
+       G.Rexx.ChkRgn = "ALL"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VPRDEND.SAT.PARMLIB"                                   
+    else                                                                        
+       G.REXX.LIB.SQ  = "VPRDEND.SAT.CARDLIB"                                   
+    IF Index(G.Rexx.ChkRgn,"SAT") > 0 | ,                                       
+       G.Rexx.ChkRgn = "SAT"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ = "VPRDEND.CAT.PARMLIB"                                    
+    else                                                                        
+       G.REXX.LIB.SQ = "VPRDEND.CAT.CARDLIB"                                    
+    IF Index(G.Rexx.ChkRgn,"CAT") > 0 | ,                                       
+       G.Rexx.ChkRgn = "CAT"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+    SQ = SQ + 1                                                                 
+                                                                                
+    If ElementType = "PARM" Then                                                
+       G.REXX.LIB.SQ  = "VPRDMIS.PARMLIB"                                       
+    else                                                                        
+       G.REXX.LIB.SQ  = "VPRDSHR.PRODNV.CARDLIB"                                
+    IF Index(G.Rexx.ChkRgn,"###") > 0 | ,                                       
+       G.Rexx.ChkRgn = "###"  Then                                              
+    Do                                                                          
+       G.REXX.LIBCHECK.SQ = "True"                                              
+    End                                                                         
+                                                                                
+    G.REXX.LIB.TLS = SQ                                                         
+                                                                                
+    Return                                                                      
+                                                                                
+  2000_Process: Procedure Expose G.                                             
+  /* ------------------------------------------------------------               
+                  Process Compare                                               
+    ------------------------------------------------------------*/              
+                                                                                
+    Call 2100_Get_Member_List                                                   
+    Call 2200_Compare_Members                                                   
+    Return                                                                      
+                                                                                
+  2100_Get_Member_List: Procedure Expose G.                                     
+  /* ------------------------------------------------------------               
+                  Get Member list from PDS                                      
+    ------------------------------------------------------------*/              
+                                                                                
+    Cmd = "LISTDS '" || Strip(G.Rexx.DevLib) ||"' MEMBER"                       
+    rc = OUTTRAP('OUT.')                                                        
+    Cmd                                                                         
+    rc = OUTTRAP('OFF')                                                         
+    Do I = 1 to OUT.0                                                           
+      If Index(OUT.I,"--MEMBERS--") > 0 Then                                    
+      Do                                                                        
+        Leave                                                                   
+      End                                                                       
+    End                                                                         
+    G.REXX.MEMBERS.  = ""                                                       
+    MS = 0                                                                      
+    Do Until (I = OUT.0)                                                        
+     I = I + 1                                                                  
+     MS = MS + 1                                                                
+     G.REXX.MEMBERS.MS = Strip(OUT.I)                                           
+     G.REXX.MEMBERS.TMS = MS                                                    
+    End                                                                         
+    Return                                                                      
+                                                                                
+  2200_Compare_Members: Procedure Expose G.                                     
+  /* ------------------------------------------------------------               
+                  Compare every member with Libaries                            
+    ------------------------------------------------------------*/              
+    G.REXX.USERID = Strip(SYSVAR("SYSUID"))                                     
+    OutDD1 = G.REXX.USERID || ".SUPERC.LIST.CHKPRM"                             
+    FreeOUTDD = "FREE FI(OUTDD)"                                                
+    DeleteOutDD = "DELETE '" || OutDD1 ||"'"                                    
+    AllocOutDD = "ALLOC FI(OUTDD) DA(SUPERC.LIST.CHKPRM) MOD"                   
+   "ALLOC FI(sysin) DUMMY REU"                                                  
+    If SYSDSN("'"|| OUTDD1 ||"'") = "OK" Then                                   
+    Do                                                                          
+      RC = OutTrap("OUT.")                                                      
+      DeleteOutDD                                                               
+      RC = OutTrap("OFF")                                                       
+    End                                                                         
+    AllocOutDD                                                                  
+    Do MS = 1 to G.REXX.MEMBERS.TMS                                             
+      FreeNewDD = "FREE FI(NEWDD)"                                              
+      AllocNewDD= "ALLOC FI(NEWDD) DA('" || G.Rexx.DevLib || "(" ||,            
+              G.REXX.MEMBERS.MS || ")') REU SHR"                                
+      AllocNewDD                                                                
+                                                                                
+      Differences =  ""                                                         
+      NotFound = ""                                                             
+      Do LS = 1 to G.REXX.LIB.TLS                                               
+        If G.REXX.LIBCHECK.LS = "True" Then                                     
+        Do                                                                      
+          DSN = "'" || Strip(G.REXX.LIB.LS) || "(" ||,                          
+          G.REXX.MEMBERS.MS || ")'"                                             
+          If SYSDSN(DSN) = "OK" Then                                            
+          Do                                                                    
+             FreeOldDD = "FREE FI(OLDDD)"                                       
+             AllocOldDD = "ALLOC FI(OLDDD) DA("|| DSN || ") REU SHR"            
+             AllocOldDD                                                         
+             PARMS = "DELTAL,LINECMP,'',''"                                     
+             "ISPEXEC SELECT PGM(ISRSUPC) PARM(DELTAL)"                         
+             If RC = 1 Then                                                     
+             Do                                                                 
+               Differences = Differences || " " || G.REXX.LIBID.LS              
+             End                                                                
+             If RC > 1 Then                                                     
+             Do                                                                 
+               Say "Error while SUPERC " G.REXX.LIB.LS ,                        
+                                         G.REXX.MEMBERS.MS                      
+               Say "Return Code"  RC ERRORTEXT(RC)                              
+             End                                                                
+             FreeOldDD                                                          
+          End                                                                   
+          Else                                                                  
+          Do                                                                    
+             NotFound = NotFound || " " || G.REXX.LIBID.LS                      
+          End                                                                   
+        End                                                                     
+      End                                                                       
+      If NotFound > "" Then                                                     
+      Do                                                                        
+        Say G.REXX.MEMBERS.MS "is not Found in" NotFound                        
+      End                                                                       
+      If  Differences > "" then                                                 
+      Do                                                                        
+        Say G.REXX.MEMBERS.MS "is Different in" Differences                     
+      End                                                                       
+      FreeNewDD                                                                 
+    End                                                                         
+    FreeOutDD                                                                   
+    Say "Comparison report ---> " OutDD1                                        
+    Return                                                                      
+                                                                                
+  XXXX_ISREDIT:                                                                 
+  /* ------------------------------------------------------------               
+                  Common Procedure to Execute Edit Macros                       
+    ------------------------------------------------------------*/              
+    Arg Cmd                                                                     
+    ADDRESS ISREDIT Cmd                                                         
+    Return                                                                      
+                                                                                
+                                                                                
+  Exit_Rexx: Procedure                                                          
+    Exit
